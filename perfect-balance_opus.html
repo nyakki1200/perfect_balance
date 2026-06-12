@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perfect Balance — solo prototype</title>
+<style>
+  /* =======================================================================
+     PERFECT BALANCE — playtest prototype
+     Single file. Open by double-clicking. No build tools, no server.
+     All the numbers you'll want to tweak live in the CONFIG block in the
+     <script> below, clearly marked "TUNING KNOBS".
+     ======================================================================= */
+  :root{
+    --bg:#0a0e1a; --bg2:#121a30; --panel:#161f38; --panel2:#1d2945;
+    --line:#2b3a5e; --ink:#e8eefc; --dim:#94a3c4; --accent:#54b9ff;
+    --safe:#2faa57; --safe-fill:rgba(63,191,79,.16); --oob:#3a1622;
+    --up:#46c558; --down:#3f8fe6; --wild:#b06bf0; --nomove:#7e8aa6;
+    --cell:30px; --col:46px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:radial-gradient(1200px 700px at 70% -10%, #1a2747, var(--bg));
+    color:var(--ink); font:14px/1.45 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:18px 16px 60px}
+  header.top{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:4px}
+  h1{font:600 22px/1 ui-sans-serif,system-ui; letter-spacing:.06em; margin:0}
+  h1 .sub{color:var(--dim); font-weight:400; letter-spacing:0; font-size:13px; margin-left:6px}
+  .meta{margin-left:auto; display:flex; gap:14px; color:var(--dim); font-size:12.5px}
+  .meta b{color:var(--ink); font-variant-numeric:tabular-nums}
+
+  .layout{display:grid; grid-template-columns:minmax(420px,1fr) 300px; gap:18px; margin-top:14px; align-items:start}
+  @media (max-width:880px){ .layout{grid-template-columns:1fr} }
+
+  /* ---- board ---- */
+  .board{background:linear-gradient(180deg,#0e1426,#0b1020); border:1px solid var(--line);
+    border-radius:14px; padding:14px 14px 10px; overflow-x:auto}
+  .cols{display:flex; gap:6px; justify-content:center; min-width:max-content}
+  .col{width:var(--col); display:flex; flex-direction:column; align-items:center}
+  .colHead{width:100%; height:30px; border-radius:8px 8px 4px 4px; display:flex; align-items:center;
+    justify-content:center; font-size:11px; font-weight:600; color:#0b1020; cursor:pointer;
+    border:1px solid rgba(255,255,255,.25); user-select:none; transition:transform .07s, box-shadow .12s}
+  .colHead:hover{transform:translateY(-1px)}
+  .col.clickable .colHead{box-shadow:0 0 0 2px var(--accent), 0 0 14px rgba(84,185,255,.5)}
+  .track{width:100%; margin-top:5px; border:1px solid var(--line); border-radius:6px; overflow:hidden}
+  .cell{height:var(--cell); border-top:1px solid rgba(255,255,255,.04); position:relative;
+    display:flex; align-items:center; justify-content:center}
+  .cell:first-child{border-top:none}
+  .cell.track-on{background:rgba(255,255,255,.025)}
+  .cell.safe{background:var(--safe-fill); box-shadow:inset 0 0 0 1px rgba(63,191,79,.28)}
+  .cell.oob{background:repeating-linear-gradient(45deg,#241019,#241019 5px,#2c0c16 5px,#2c0c16 10px)}
+  .cell .rownum{position:absolute; left:3px; top:2px; font-size:8px; color:rgba(255,255,255,.22)}
+  .marker{width:22px; height:22px; border-radius:50%;
+    box-shadow:0 0 0 1px rgba(0,0,0,.4), 0 0 10px 1px var(--gl), inset 0 -3px 6px rgba(0,0,0,.35),
+      inset 0 3px 5px rgba(255,255,255,.55); position:relative; z-index:2}
+  .safeband-label{font-size:9px; color:var(--safe); text-align:center; margin-top:3px; letter-spacing:.08em}
+
+  .ties{width:100%; margin-top:6px; display:flex; flex-direction:column; gap:3px}
+  .tieslot{height:13px; border:1px dashed var(--line); border-radius:4px; display:flex; align-items:center; justify-content:center}
+  .tiedot{width:10px; height:10px; border-radius:50%; box-shadow:inset 0 -1px 2px rgba(0,0,0,.4), inset 0 1px 2px rgba(255,255,255,.5)}
+
+  /* ---- control panel ---- */
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px}
+  .phase{font-size:12px; color:var(--accent); letter-spacing:.08em; text-transform:uppercase; font-weight:600}
+  .instr{margin:6px 0 12px; color:var(--dim); min-height:34px}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  button{font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+    padding:8px 12px; border-radius:8px; transition:background .12s, border-color .12s}
+  button:hover:not(:disabled){background:#26345a; border-color:var(--accent)}
+  button:disabled{opacity:.4; cursor:not-allowed}
+  button.primary{background:#1f6fb0; border-color:#2f86cf}
+  button.primary:hover:not(:disabled){background:#2782cc}
+
+  .tokens, .dice{display:flex; gap:7px; flex-wrap:wrap; margin:10px 0 4px; min-height:40px}
+  .chip{width:36px; height:36px; border-radius:50%; border:2px solid transparent; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; position:relative;
+    box-shadow:inset 0 -3px 6px rgba(0,0,0,.4), inset 0 3px 5px rgba(255,255,255,.45)}
+  .chip.sel{border-color:var(--accent); box-shadow:0 0 10px var(--accent), inset 0 -3px 6px rgba(0,0,0,.4)}
+  .die{width:38px; height:38px; border-radius:9px; border:2px solid #2b3a5e; background:#0e1730; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; position:relative}
+  .die.sel{border-color:var(--accent); box-shadow:0 0 10px var(--accent)}
+  .die.up{color:var(--up)} .die.down{color:var(--down)} .die.wild{color:var(--wild)} .die.no{color:var(--nomove)}
+  .die .wd{position:absolute; bottom:-7px; left:50%; transform:translateX(-50%); font-size:9px; color:var(--dim);
+    background:var(--panel); padding:0 3px; border-radius:3px}
+  .wildToggle{display:inline-flex; gap:4px; margin-left:6px}
+  .wildToggle button{padding:4px 8px; font-size:12px}
+  .wildToggle button.on{background:#2782cc; border-color:#2782cc}
+
+  .log{margin-top:12px; border-top:1px solid var(--line); padding-top:10px; max-height:200px; overflow:auto;
+    font-size:12px; color:var(--dim)}
+  .log div{padding:2px 0; border-bottom:1px solid rgba(255,255,255,.03)}
+  .log .win{color:var(--up)} .log .loss{color:#ff7a6a} .log .turn{color:var(--accent); font-weight:600}
+
+  /* ---- debug / tuning ---- */
+  details.tune{margin-top:14px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:0 14px}
+  details.tune summary{cursor:pointer; padding:12px 0; font-weight:600; color:var(--ink); list-style:none}
+  details.tune summary::-webkit-details-marker{display:none}
+  details.tune summary::before{content:"▸ "; color:var(--accent)}
+  details.tune[open] summary::before{content:"▾ "}
+  .tunegrid{display:grid; grid-template-columns:1fr; gap:8px; padding:0 0 14px}
+  .tunerow{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--dim)}
+  .tunerow label{flex:1; color:var(--ink)}
+  .tunerow input[type=text]{width:90px; background:#0e1730; color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:5px 7px}
+  .tunerow select{background:#0e1730; color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:5px 7px}
+  .tunerow input[type=checkbox]{width:18px; height:18px; accent-color:var(--accent); cursor:pointer}
+  .hint{font-size:11.5px; color:var(--dim); margin-top:-2px; padding-bottom:6px}
+
+  /* ---- banner ---- */
+  .banner{margin-top:14px; border-radius:12px; padding:16px; text-align:center; display:none}
+  .banner.show{display:block}
+  .banner.win{background:linear-gradient(180deg,#123d22,#0e2a18); border:1px solid var(--safe)}
+  .banner.loss{background:linear-gradient(180deg,#3d1419,#2a0e12); border:1px solid #ff7a6a}
+  .banner h2{margin:0 0 4px; letter-spacing:.1em}
+  .banner.win h2{color:var(--up)} .banner.loss h2{color:#ff9a8a}
+  .banner p{margin:0; color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>PERFECT BALANCE <span class="sub">solo prototype</span></h1>
+    <div class="meta">
+      <span>Turn <b id="mTurn">1</b></span>
+      <span>Bag <b id="mBag">32</b></span>
+      <span>Safe <b id="mSafe">0</b>/8</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="board">
+      <div class="cols" id="cols"></div>
+    </section>
+
+    <aside>
+      <div class="panel">
+        <div class="phase" id="phase">SETUP</div>
+        <div class="instr" id="instr">Press New Game to begin.</div>
+
+        <div class="row">
+          <button class="primary" id="btnNew">New game</button>
+          <button id="btnRoll" disabled>Roll 8 dice</button>
+        </div>
+
+        <div class="tokens" id="tokens"></div>
+        <div class="dice" id="dice"></div>
+
+        <div class="log" id="log"></div>
+      </div>
+
+      <details class="tune">
+        <summary>Tuning knobs (the rules I had to pin down)</summary>
+        <div class="tunegrid">
+          <div class="tunerow"><label>Chained ties cascade</label>
+            <select id="tChain"><option value="off">off (one level)</option><option value="on">on (cascade)</option></select></div>
+          <div class="hint">Off: a die only moves the column it's on + tokens directly under it. On: those moved markers also drag tokens under <i>their</i> columns (combos + cascade risk).</div>
+
+          <div class="tunerow"><label>Leaving valid range</label>
+            <select id="tOob"><option value="lose">instant loss</option><option value="board">allowed (only board edge kills)</option></select></div>
+          <div class="hint">Instant loss: overshooting a marker past its safe end (e.g. a left marker above 7) ends the game. Allowed: it can sit in the out-of-bounds zone and you only lose at the physical edge (below 1 / above 11).</div>
+
+          <div class="tunerow"><label>Win is checked</label>
+            <select id="tWin"><option value="anytime">anytime (instant)</option><option value="endOfTurn">after all dice placed</option></select></div>
+
+          <div class="tunerow"><label>Stack duplicate ties</label>
+            <select id="tStack"><option value="on">on</option><option value="off">off</option></select></div>
+          <div class="hint">On: two Blue tokens under one column move Blue twice per trigger. Off: a color moves once regardless of how many of its tokens sit there.</div>
+
+          <div class="tunerow"><label>Seed (blank = random)</label>
+            <input type="text" id="tSeed" placeholder="e.g. 1234"></div>
+          <div class="hint">Same seed = identical token draws &amp; dice. Use it to replay an exact deal, or hand two testers the same number.</div>
+        </div>
+      </details>
+
+      <details class="tune">
+        <summary>Difficulty variations (a–d) — apply on New game</summary>
+        <div class="tunegrid">
+          <div class="tunerow"><label>(a) Tight safe zone — 3 rows → 2</label>
+            <input type="checkbox" id="vSafe"></div>
+          <div class="hint">Left safe becomes {5,6}, right becomes {6,7} — the outer safe row on each side disappears, so there's no margin against overshooting.</div>
+
+          <div class="tunerow"><label>(b) Varying start positions</label>
+            <input type="checkbox" id="vStart"></div>
+          <div class="hint">Each marker starts on a random valid row outside the safe zone (seeded, so a seed reproduces the same setup).</div>
+
+          <div class="tunerow"><label>(c) Ordered token placement</label>
+            <input type="checkbox" id="vOrder"></div>
+          <div class="hint">Drawn tokens auto-fill slots left-to-right, top row first — you lose all choice of which colour ties to which column.</div>
+
+          <div class="tunerow"><label>(d) Hard dice — 3 up / 3 down</label>
+            <input type="checkbox" id="vDice"></div>
+          <div class="hint">Removes the wild and no-move faces. Every die forces a move; no relief valve, no flexibility.</div>
+        </div>
+      </details>
+    </aside>
+  </div>
+
+  <div class="banner" id="banner">
+    <h2 id="bTitle"></h2><p id="bMsg"></p>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   ===============  TUNING KNOBS  (edit freely)  ===========================
+   ========================================================================= */
+const CONFIG = {
+  CHAIN_PROPAGATION: false,   // do tied markers' moves cascade to tokens under their own columns?
+  OOB_INSTANT_LOSS:  true,    // lose the moment a marker leaves its valid range (else only at board edge 1..11)
+  WIN_TIMING:        'anytime', // 'anytime' = win instantly when all 8 safe; 'endOfTurn' = check after dice phase
+  STACK_DUPLICATE_TIES: true, // multiple same-color tokens under a column each add a move
+  MAX_TIES_PER_COLUMN: 4,
+  LEFT_START:  3,
+  RIGHT_START: 9,
+  SAFE: [5,7],                // safe zone rows (inclusive), shared by all tracks
+  DIE_FACES: ['up','up','down','down','wild','no'],  // one die's six faces
+  DICE_COUNT: 8,
+  TOKENS_PER_COLOR: 4,
+
+  /* ---- DIFFICULTY VARIATIONS (mix & match; all off = beginner) ---- */
+  TIGHT_SAFE:        false,   // (a) safe zone 3 rows -> 2: left {5,6}, right {6,7}
+  VARY_STARTS:       false,   // (b) randomise each marker's start (seeded, never in the safe zone)
+  ORDERED_PLACEMENT: false,   // (c) tokens auto-fill slots in reading order; no choice of column
+  HARD_DICE:         false,   // (d) drop wild + no-move; dice become 3 up / 3 down
+};
+
+/* 8 tracks = 8 columns. Left four live in rows 1-7, right four in rows 5-11.
+   Each column IS the track of its own colour (a die on column i moves track i). */
+const TRACKS = [
+  {name:'Silver', color:'#cdd8e6', glow:'#eef3fa', side:'left'},
+  {name:'Orange', color:'#ef6a2a', glow:'#ff9a5a', side:'left'},
+  {name:'Yellow', color:'#f3b81e', glow:'#ffd45a', side:'left'},
+  {name:'Green',  color:'#3fc04f', glow:'#79e885', side:'left'},
+  {name:'Blue',   color:'#2aa6ec', glow:'#6fc8ff', side:'right'},
+  {name:'Purple', color:'#9b4de0', glow:'#c489ff', side:'right'},
+  {name:'Red',    color:'#e23a2f', glow:'#ff7a6a', side:'right'},
+  {name:'Black',  color:'#39414f', glow:'#5fa8d6', side:'right'},
+];
+const ROWS = 11;
+
+/* ---- seeded RNG so playtests are reproducible ---- */
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+let rng = Math.random;
+function seedFrom(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){
+  h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; } return (h>>>0)||1; }
+
+/* ---- game state ---- */
+let S = null;
+
+function bounds(t){
+  if(t.side==='left')  return {min:1, max:7};
+  else                 return {min:5, max:11};
+}
+
+/* per-track safe zone — variation (a) tightens it from 3 rows to 2, asymmetrically */
+function safeFor(t){
+  if(!CONFIG.TIGHT_SAFE) return CONFIG.SAFE.slice();       // both sides {5,6,7}
+  return t.side==='left' ? [5,6] : [6,7];                  // drop the outer row on each side
+}
+
+/* starting position per track — variation (b) randomises within valid-but-unsafe rows */
+function startFor(idx){
+  const t=TRACKS[idx], b=bounds(t);
+  if(!CONFIG.VARY_STARTS) return t.side==='left' ? CONFIG.LEFT_START : CONFIG.RIGHT_START;
+  const [sLo,sHi]=safeFor(t);
+  const choices=[];
+  for(let r=b.min;r<=b.max;r++) if(r<sLo||r>sHi) choices.push(r);   // valid, not already safe
+  return choices[Math.floor(rng()*choices.length)];
+}
+
+function newGame(){
+  const seedInput = document.getElementById('tSeed').value.trim();
+  rng = seedInput ? mulberry32(seedFrom(seedInput)) : Math.random;
+  readKnobs();
+
+  // build bag: TOKENS_PER_COLOR of each of the 8 colours, shuffled
+  let bag=[];
+  for(let c=0;c<8;c++) for(let k=0;k<CONFIG.TOKENS_PER_COLOR;k++) bag.push(c);
+  for(let i=bag.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [bag[i],bag[j]]=[bag[j],bag[i]]; }
+
+  // (d) hard dice drop wild + no-move for an extra up and down
+  const dieFaces = CONFIG.HARD_DICE ? ['up','up','up','down','down','down'] : CONFIG.DIE_FACES;
+
+  S = {
+    pos: TRACKS.map((t,i)=>startFor(i)),   // marker position per track
+    ties: Array.from({length:8},()=>[]),   // ties[col] = [colourIndex,...] tokens placed under that column
+    bag,
+    dieFaces,
+    placed: 0,        // total tokens placed so far (drives ordered placement)
+    toPlace: [],      // tokens drawn this turn, awaiting placement
+    selToken: 0,
+    dice: [],         // dice rolled this turn, awaiting placement
+    selDie: -1,
+    turn: 1,
+    phase: 'placeTokens',
+    over: null,
+  };
+  document.getElementById('log').innerHTML='';
+  log('Turn 1','turn');
+  drawTokens();
+  render();
+}
+
+function readKnobs(){
+  CONFIG.CHAIN_PROPAGATION   = document.getElementById('tChain').value==='on';
+  CONFIG.OOB_INSTANT_LOSS    = document.getElementById('tOob').value==='lose';
+  CONFIG.WIN_TIMING          = document.getElementById('tWin').value;
+  CONFIG.STACK_DUPLICATE_TIES= document.getElementById('tStack').value==='on';
+  CONFIG.TIGHT_SAFE          = document.getElementById('vSafe').checked;
+  CONFIG.VARY_STARTS         = document.getElementById('vStart').checked;
+  CONFIG.ORDERED_PLACEMENT   = document.getElementById('vOrder').checked;
+  CONFIG.HARD_DICE           = document.getElementById('vDice').checked;
+}
+
+function drawTokens(){
+  S.toPlace=[];
+  for(let i=0;i<2 && S.bag.length>0;i++) S.toPlace.push(S.bag.pop());
+  S.selToken=0;
+  if(S.toPlace.length){
+    S.phase='placeTokens';
+    log('Drew '+S.toPlace.map(c=>TRACKS[c].name).join(' + '));
+    if(CONFIG.ORDERED_PLACEMENT) autoPlaceOrdered();   // (c) no choice — fill in reading order
+  } else {
+    // bag empty: skip straight to rolling with the ties already on the board
+    S.phase='preRoll';
+  }
+}
+
+/* (c) place drawn tokens into the next slots, left-to-right then next row */
+function autoPlaceOrdered(){
+  while(S.toPlace.length){
+    const col=S.placed%8;                      // column 0..7 cycling each row
+    const colour=S.toPlace.shift();
+    S.ties[col].push(colour); S.placed++;
+    log('Auto-tied '+TRACKS[colour].name+' → '+TRACKS[col].name+' (row '+(Math.floor((S.placed-1)/8)+1)+')');
+  }
+  S.phase='preRoll';
+}
+
+/* place the currently-selected drawn token under column c (free-placement mode) */
+function placeToken(c){
+  if(S.phase!=='placeTokens' || S.toPlace.length===0) return;
+  if(CONFIG.ORDERED_PLACEMENT) return;          // placement is forced in this mode
+  if(S.ties[c].length>=CONFIG.MAX_TIES_PER_COLUMN) return;
+  const colour=S.toPlace[S.selToken];
+  S.ties[c].push(colour); S.placed++;
+  log('Tied '+TRACKS[colour].name+' → '+TRACKS[c].name+' column');
+  S.toPlace.splice(S.selToken,1);
+  S.selToken=0;
+  if(S.toPlace.length===0) S.phase='preRoll';
+  render();
+}
+
+function rollDice(){
+  if(S.phase!=='preRoll') return;
+  S.dice=[];
+  for(let i=0;i<CONFIG.DICE_COUNT;i++){
+    const face=S.dieFaces[Math.floor(rng()*S.dieFaces.length)];
+    S.dice.push({type:face, dir:+1}); // dir used only by 'wild'
+  }
+  S.selDie=-1;
+  S.phase='placeDice';
+  const counts=S.dice.reduce((m,d)=>(m[d.type]=(m[d.type]||0)+1,m),{});
+  log('Rolled: '+Object.entries(counts).map(([k,v])=>v+'×'+k).join(', '));
+  render();
+}
+
+function dirOf(d){ if(d.type==='up')return +1; if(d.type==='down')return -1; if(d.type==='wild')return d.dir; return 0; }
+
+/* apply a die placed on column c */
+function placeDie(c){
+  if(S.phase!=='placeDice' || S.selDie<0) return;
+  const die=S.dice[S.selDie];
+  const dir=dirOf(die);
+  applyMove(c, dir, die.type);
+  S.dice.splice(S.selDie,1);
+  S.selDie=-1;
+  if(S.over){ render(); return; }
+  if(S.dice.length===0) endDicePhase();
+  render();
+}
+
+/* core movement: move column c's marker + its tied colours by dir (+1/-1/0) */
+function applyMove(c, dir, label){
+  if(dir===0){ log('No-move die on '+TRACKS[c].name); checkWin(); return; }
+  const moved=[];                  // collect track indices to move (with multiplicity = stacking)
+  const visited=new Set();
+  (function gather(col){
+    if(CONFIG.CHAIN_PROPAGATION){ if(visited.has(col)) return; visited.add(col); }
+    moved.push(col);               // the column's own marker
+    for(const t of S.ties[col]){
+      if(CONFIG.STACK_DUPLICATE_TIES) moved.push(t);
+      else if(!moved.includes(t))   moved.push(t);
+      if(CONFIG.CHAIN_PROPAGATION) gather(t);
+    }
+  })(c);
+
+  for(const t of moved) S.pos[t]+=dir;
+  log((dir>0?'▲':'▼')+' '+TRACKS[c].name+' column → moved '+moved.map(t=>TRACKS[t].name).join(', '));
+
+  // loss check
+  for(const t of new Set(moved)){
+    const b=bounds(TRACKS[t]);
+    const dead = CONFIG.OOB_INSTANT_LOSS ? (S.pos[t]<b.min || S.pos[t]>b.max)
+                                         : (S.pos[t]<1   || S.pos[t]>ROWS);
+    if(dead){ lose(TRACKS[t].name+' fell off the edge at '+S.pos[t]+'.'); return; }
+  }
+  if(CONFIG.WIN_TIMING==='anytime') checkWin();
+}
+
+function isSafe(t){ const p=S.pos[t], [lo,hi]=safeFor(TRACKS[t]); return p>=lo && p<=hi; }
+function safeCount(){ let n=0; for(let t=0;t<8;t++) if(isSafe(t)) n++; return n; }
+function checkWin(){ if(safeCount()===8) win(); }
+
+function endDicePhase(){
+  if(CONFIG.WIN_TIMING==='endOfTurn') checkWin();
+  if(S.over) return;
+  S.turn++;
+  log('Turn '+S.turn,'turn');
+  if(S.bag.length>0) drawTokens(); else S.phase='preRoll';
+}
+
+function win(){ S.over={win:true,msg:'All eight markers rest in the safe zone.'}; S.phase='over'; log('PERFECT BALANCE — you win!','win'); }
+function lose(msg){ S.over={win:false,msg}; S.phase='over'; log('EQUILIBRIUM LOST — '+msg,'loss'); }
+
+/* ---------------- rendering ---------------- */
+function render(){
+  document.getElementById('mTurn').textContent=S.turn;
+  document.getElementById('mBag').textContent=S.bag.length;
+  document.getElementById('mSafe').textContent=safeCount();
+
+  // board
+  const cols=document.getElementById('cols'); cols.innerHTML='';
+  const clickableCols = (S.phase==='placeDice') || (S.phase==='placeTokens' && !CONFIG.ORDERED_PLACEMENT);
+  for(let c=0;c<8;c++){
+    const T=TRACKS[c], b=bounds(T);
+    const col=document.createElement('div'); col.className='col'+(clickableCols?' clickable':'');
+    // header
+    const head=document.createElement('div'); head.className='colHead';
+    head.style.background='linear-gradient(180deg,'+T.glow+','+T.color+')';
+    head.textContent=T.name;
+    head.onclick=()=>{ if(S.phase==='placeTokens') placeToken(c); else if(S.phase==='placeDice') placeDie(c); };
+    col.appendChild(head);
+    // track
+    const track=document.createElement('div'); track.className='track';
+    const [sLo,sHi]=safeFor(T);
+    for(let r=ROWS;r>=1;r--){
+      const cell=document.createElement('div'); cell.className='cell';
+      const inRange = r>=b.min && r<=b.max;
+      const inSafe  = r>=sLo && r<=sHi;
+      if(!inRange) cell.classList.add('oob');
+      else if(inSafe) cell.classList.add('safe');
+      else cell.classList.add('track-on');
+      const rn=document.createElement('span'); rn.className='rownum'; rn.textContent=r; cell.appendChild(rn);
+      if(S.pos[c]===r){
+        const m=document.createElement('div'); m.className='marker';
+        m.style.background='radial-gradient(circle at 35% 30%, #fff, '+T.color+' 70%)';
+        m.style.setProperty('--gl',T.glow);
+        cell.appendChild(m);
+      }
+      track.appendChild(cell);
+    }
+    col.appendChild(track);
+    // ties
+    const ties=document.createElement('div'); ties.className='ties';
+    for(let i=0;i<CONFIG.MAX_TIES_PER_COLUMN;i++){
+      const slot=document.createElement('div'); slot.className='tieslot';
+      if(S.ties[c][i]!==undefined){
+        const d=document.createElement('div'); d.className='tiedot';
+        const tc=TRACKS[S.ties[c][i]]; d.style.background=tc.color;
+        slot.appendChild(d);
+      }
+      ties.appendChild(slot);
+    }
+    col.appendChild(ties);
+    cols.appendChild(col);
+  }
+
+  // phase + instruction
+  const ph=document.getElementById('phase'), ins=document.getElementById('instr');
+  const map={placeTokens:'Place tokens',preRoll:'Roll',placeDice:'Place dice',over:'Game over'};
+  ph.textContent=map[S.phase]||S.phase;
+  if(S.phase==='placeTokens') ins.textContent= CONFIG.ORDERED_PLACEMENT
+       ? 'Ordered placement is on — tokens fill slots automatically. Roll when ready.'
+       : 'Pick a drawn token, then click a column header to tie that colour to it.';
+  else if(S.phase==='preRoll') ins.textContent='Tokens placed. Roll the dice.';
+  else if(S.phase==='placeDice') ins.textContent= CONFIG.HARD_DICE
+       ? 'Pick a die, then click a column to place it. Every die forces a move.'
+       : 'Pick a die, then click a column to place it. Set wild dice to ▲ or ▼ first.';
+  else if(S.phase==='over') ins.textContent=S.over.win?'Solved. New game to try a tighter seed.':'Lost. New game to retry.';
+
+  document.getElementById('btnRoll').disabled = (S.phase!=='preRoll');
+
+  // tokens
+  const tk=document.getElementById('tokens'); tk.innerHTML='';
+  S.toPlace.forEach((colour,i)=>{
+    const c=document.createElement('div'); c.className='chip'+(i===S.selToken?' sel':'');
+    const T=TRACKS[colour]; c.style.background='radial-gradient(circle at 35% 30%, #fff, '+T.color+' 72%)';
+    c.title=T.name; c.onclick=()=>{ S.selToken=i; render(); };
+    tk.appendChild(c);
+  });
+
+  // dice
+  const dc=document.getElementById('dice'); dc.innerHTML='';
+  const glyph={up:'▲',down:'▼',wild:'⇅',no:'⧗'};
+  S.dice.forEach((d,i)=>{
+    const el=document.createElement('div'); el.className='die '+d.type+(i===S.selDie?' sel':'');
+    el.textContent=glyph[d.type];
+    el.onclick=()=>{ S.selDie=i; render(); };
+    if(d.type==='wild' && i===S.selDie){
+      const wd=document.createElement('div'); wd.className='wd'; wd.textContent=d.dir>0?'up':'down';
+      el.appendChild(wd);
+    }
+    dc.appendChild(el);
+  });
+  // wild direction toggle for selected wild die
+  if(S.selDie>=0 && S.dice[S.selDie] && S.dice[S.selDie].type==='wild'){
+    const t=document.createElement('div'); t.className='wildToggle';
+    const up=document.createElement('button'); up.textContent='▲ up'; up.className=S.dice[S.selDie].dir>0?'on':'';
+    const dn=document.createElement('button'); dn.textContent='▼ down'; dn.className=S.dice[S.selDie].dir<0?'on':'';
+    up.onclick=()=>{ S.dice[S.selDie].dir=+1; render(); };
+    dn.onclick=()=>{ S.dice[S.selDie].dir=-1; render(); };
+    t.appendChild(up); t.appendChild(dn); dc.appendChild(t);
+  }
+
+  // banner
+  const banner=document.getElementById('banner');
+  if(S.over){
+    banner.className='banner show '+(S.over.win?'win':'loss');
+    document.getElementById('bTitle').textContent=S.over.win?'PERFECT BALANCE':'EQUILIBRIUM LOST';
+    document.getElementById('bMsg').textContent=S.over.msg;
+  } else banner.className='banner';
+}
+
+function log(msg,cls){
+  const l=document.getElementById('log'); const d=document.createElement('div');
+  if(cls) d.className=cls; d.textContent=msg; l.insertBefore(d,l.firstChild);
+}
+
+document.getElementById('btnNew').onclick=newGame;
+document.getElementById('btnRoll').onclick=rollDice;
+
+newGame();
+</script>
+</body>
+</html>
