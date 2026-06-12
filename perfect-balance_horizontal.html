@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Perfect Balance — Digital Prototype</title>
+<style>
+  :root{
+    --bg-deep:#070b18;
+    --bg-panel:#101831;
+    --bg-panel-2:#0c1226;
+    --line:#27325a;
+    --text:#dfe6f5;
+    --text-dim:#8fa0c4;
+    --safe:#2e9e44;
+    --danger:#d8434a;
+    --accent:#7fd4ff;
+    --c-pearl:#e9e2f0; --c-orange:#e8731f; --c-yellow:#f0b41e; --c-green:#41c14f;
+    --c-blue:#6fb7e8; --c-purple:#a64fd6; --c-red:#c92a23; --c-black:#262d44;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:"Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #1b2a55 0%, transparent 60%),
+      radial-gradient(900px 500px at 10% 110%, #251b46 0%, transparent 60%),
+      var(--bg-deep);
+    color:var(--text);
+    min-height:100%;
+    padding:18px;
+  }
+  /* starfield */
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; opacity:.5;
+    background-image:
+      radial-gradient(1px 1px at 12% 22%, #fff 50%, transparent 51%),
+      radial-gradient(1px 1px at 70% 12%, #cfe6ff 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 38% 64%, #fff 50%, transparent 51%),
+      radial-gradient(1px 1px at 86% 48%, #ffe9c9 50%, transparent 51%),
+      radial-gradient(1px 1px at 22% 86%, #fff 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 56% 36%, #cfe6ff 50%, transparent 51%),
+      radial-gradient(1px 1px at 92% 80%, #fff 50%, transparent 51%),
+      radial-gradient(1px 1px at 45% 8%, #fff 50%, transparent 51%);
+  }
+  header{
+    display:flex; flex-wrap:wrap; align-items:baseline; gap:14px;
+    max-width:1180px; margin:0 auto 14px auto;
+  }
+  h1{font-size:26px; letter-spacing:.04em; font-weight:700;}
+  h1 .tilt{color:var(--accent);}
+  .sub{color:var(--text-dim); font-size:13px;}
+  .topbar{
+    max-width:1180px; margin:0 auto 16px auto;
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+    background:var(--bg-panel-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px;
+  }
+  .topbar label{font-size:12px; color:var(--text-dim);}
+  select,input[type=text]{
+    background:#0a1024; color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:6px 8px; font:inherit; font-size:13px;
+  }
+  input[type=text]{width:110px;}
+  button{
+    font:inherit; font-size:13px; font-weight:600; letter-spacing:.02em;
+    background:#1a2750; color:var(--text); border:1px solid #3a4a86;
+    border-radius:8px; padding:7px 14px; cursor:pointer;
+  }
+  button:hover{background:#22315f;}
+  button:focus-visible, select:focus-visible, input:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  button.primary{background:#1f5e8f; border-color:#3f8fc4;}
+  button.primary:hover{background:#2779b3;}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+
+  .layout{
+    max-width:1180px; margin:0 auto;
+    display:grid; grid-template-columns: minmax(0,1fr) 330px; gap:16px;
+    align-items:start;
+  }
+  @media (max-width:900px){ .layout{grid-template-columns:1fr;} }
+
+  /* ---------------- BOARD (horizontal tracks) ---------------- */
+  .board-wrap{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:14px;
+    padding:14px; position:relative;
+  }
+  .board{
+    display:grid;
+    grid-template-columns: 34px repeat(11, minmax(0,1fr)) 12px repeat(4, minmax(0,1fr));
+    gap:4px; align-items:center;
+  }
+  @media (max-width:600px){
+    .board{ grid-template-columns: 26px repeat(11, minmax(0,1fr)) 8px repeat(4, minmax(0,1fr)); gap:2px; }
+  }
+  .numlabel{
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; color:var(--text-dim); padding-bottom:4px;
+  }
+  .spacer{ }
+  .tied-label{
+    font-size:10px; color:var(--text-dim); text-align:center; letter-spacing:.14em; padding-bottom:4px;
+  }
+  .colhead{
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .cell{
+    aspect-ratio:1/1; border-radius:8px; position:relative;
+    background:#0a1124; border:1px solid #1b2547;
+    display:flex; align-items:center; justify-content:center;
+    min-width:0;
+  }
+  .cell.safe{ background:rgba(46,158,68,.28); border-color:rgba(86,210,110,.55); }
+  .cell.void{
+    background:repeating-linear-gradient(45deg, #0a0d1a 0 6px, #11152a 6px 12px);
+    border-color:#161b30;
+  }
+  .cell:not(.void){ cursor:pointer; }
+
+  /* orbs */
+  .orb{
+    width:78%; height:78%; border-radius:50%;
+    position:relative;
+    box-shadow: inset -4px -6px 10px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.6);
+  }
+  .orb::after{
+    content:""; position:absolute; left:18%; top:10%; width:34%; height:24%;
+    border-radius:50%; background:rgba(255,255,255,.75); filter:blur(1px);
+    transform:rotate(-18deg);
+  }
+  .colhead-orb{ width:24px; height:24px; border-radius:50%;
+    box-shadow: inset -3px -4px 6px rgba(0,0,0,.5);
+    position:relative;
+  }
+  .colhead-orb::after{content:""; position:absolute; left:20%; top:12%; width:32%; height:24%;
+    border-radius:50%; background:rgba(255,255,255,.7);}
+  .orb.black, .colhead-orb.black{ box-shadow: inset -4px -6px 10px rgba(0,0,0,.8), 0 0 0 2px #3f7ddc, 0 0 10px #3f7ddc66; }
+
+  /* token slots — inline at the right end of each row */
+  .slot{
+    width:100%; aspect-ratio:1/1; border-radius:50%;
+    border:1.5px dashed #324073; background:#0a1124;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; min-width:0;
+  }
+  .slot .orb{ width:84%; height:84%; }
+
+  /* ---------------- SIDE PANEL ---------------- */
+  .panel{
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .card{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px;
+  }
+  .card h2{ font-size:12px; text-transform:uppercase; letter-spacing:.14em; color:var(--text-dim); margin-bottom:8px; }
+  .phase-msg{ font-size:14px; line-height:1.45; }
+  .phase-msg b{ color:var(--accent); }
+  .roundnum{ font-size:13px; color:var(--text-dim); margin-top:6px;}
+
+  .tray{ display:flex; gap:10px; flex-wrap:wrap; }
+  .draw-token{
+    width:44px; height:44px; border-radius:50%; border:2px solid transparent;
+    cursor:pointer; padding:0; background:transparent;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .draw-token .orb{ width:100%; height:100%; }
+  .draw-token.selected{ border-color:var(--accent); box-shadow:0 0 12px var(--accent); }
+  .draw-token.placed{ opacity:.18; cursor:default; }
+
+  .die{
+    width:46px; height:46px; border-radius:10px;
+    background:#dfe3ee; border:2px solid #8b93ad; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px; color:#222; padding:0;
+  }
+  .die.selected{ border-color:var(--accent); box-shadow:0 0 12px var(--accent); }
+  .die.placed{ opacity:.18; cursor:default; }
+  .die .arrow{ font-weight:700; }
+  .die .up{ color:#3f9e2f; }
+  .die .down{ color:#3a4fb0; }
+  .die .wild{ background:linear-gradient(180deg,#3f9e2f,#3a4fb0); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .die .blank{ color:#111; font-size:20px; }
+
+  .wildchoice{ display:flex; gap:8px; margin-top:10px; }
+  .wildchoice button{ flex:1; }
+
+  .log{
+    max-height:240px; overflow-y:auto; font-size:12px; line-height:1.55;
+    display:flex; flex-direction:column-reverse;
+  }
+  .log p{ margin-bottom:3px; color:var(--text-dim); }
+  .log p.round{ color:var(--accent); font-weight:600; margin-top:4px;}
+  .log p.death{ color:var(--danger); font-weight:600; }
+  .log p.win{ color:#6ee08a; font-weight:600; }
+  .log .sw{ display:inline-block; width:9px; height:9px; border-radius:50%; margin:0 3px -1px 1px; }
+
+  /* banner */
+  .banner{
+    position:absolute; inset:0; border-radius:14px;
+    background:rgba(5,8,18,.86); backdrop-filter:blur(2px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+    text-align:center; padding:20px; z-index:5;
+  }
+  .banner h3{ font-size:30px; letter-spacing:.06em; }
+  .banner.win h3{ color:#6ee08a; }
+  .banner.loss h3{ color:var(--danger); }
+  .banner p{ color:var(--text-dim); max-width:420px; font-size:14px; line-height:1.5;}
+  .hidden{ display:none !important; }
+
+  .bagcount{ font-size:12px; color:var(--text-dim); margin-top:8px; }
+
+  @media (prefers-reduced-motion: no-preference){
+    .orb.marker{ transition: none; }
+    .pulse{ animation:pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse{ 0%,100%{box-shadow:0 0 0 2px var(--accent);} 50%{box-shadow:0 0 14px 4px var(--accent);} }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>PERFECT <span class="tilt">BALANCE</span></h1>
+  <span class="sub">Solo prototype · get all eight markers into the green equilibrium band · don't fall off either edge</span>
+</header>
+
+<div class="topbar">
+  <label>Win check
+    <select id="modeSel">
+      <option value="standard">End of round</option>
+      <option value="beginner">After every die</option>
+    </select>
+  </label>
+  <label>Safe band
+    <select id="safeSel">
+      <option value="3">3-wide (5–7)</option>
+      <option value="2">2-wide (5–6 / 6–7)</option>
+    </select>
+  </label>
+  <label>Start
+    <select id="startSel">
+      <option value="std">3 / 9</option>
+      <option value="edge">2 / 10</option>
+      <option value="rand">Random</option>
+    </select>
+  </label>
+  <label>Tokens
+    <select id="placeSel">
+      <option value="free">Free placement</option>
+      <option value="forced">Forced row-fill</option>
+    </select>
+  </label>
+  <label>Dice
+    <select id="diceSel">
+      <option value="std">2▶ 2◀ wild blank</option>
+      <option value="hard">3▶ 3◀</option>
+    </select>
+  </label>
+  <label>Seed <input type="text" id="seedInput" placeholder="random"></label>
+  <button class="primary" id="newGameBtn">New game</button>
+  <span class="bagcount" id="seedShow"></span>
+</div>
+
+<div class="layout">
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+    <div class="banner hidden" id="banner">
+      <h3 id="bannerTitle"></h3>
+      <p id="bannerMsg"></p>
+      <button class="primary" id="bannerBtn">Play again</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="card">
+      <h2>Phase</h2>
+      <div class="phase-msg" id="phaseMsg"></div>
+      <div class="roundnum" id="roundShow"></div>
+      <div class="bagcount" id="bagShow"></div>
+    </div>
+
+    <div class="card" id="tokenCard">
+      <h2>Drawn tokens — place both</h2>
+      <div class="tray" id="tokenTray"></div>
+    </div>
+
+    <div class="card" id="diceCard">
+      <h2>Dice — place all eight</h2>
+      <div class="tray" id="diceTray"></div>
+      <div class="wildchoice hidden" id="wildChoice">
+        <button id="wildUp">▶ Right</button>
+        <button id="wildDown">◀ Left</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Move log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------------- data ---------------- */
+const COLORS = [
+  {key:"pearl",  name:"Pearl",  css:"var(--c-pearl)",  grad:"radial-gradient(circle at 35% 30%, #ffffff, #cfc4dd 60%, #9b8fb3)"},
+  {key:"orange", name:"Orange", css:"var(--c-orange)", grad:"radial-gradient(circle at 35% 30%, #ffc285, #e8731f 60%, #8f3c05)"},
+  {key:"yellow", name:"Yellow", css:"var(--c-yellow)", grad:"radial-gradient(circle at 35% 30%, #ffe9a8, #f0b41e 60%, #8f6505)"},
+  {key:"green",  name:"Green",  css:"var(--c-green)",  grad:"radial-gradient(circle at 35% 30%, #b8f5c0, #41c14f 60%, #135f1f)"},
+  {key:"blue",   name:"Blue",   css:"var(--c-blue)",   grad:"radial-gradient(circle at 35% 30%, #dff2ff, #6fb7e8 60%, #1f5d8f)"},
+  {key:"purple", name:"Purple", css:"var(--c-purple)", grad:"radial-gradient(circle at 35% 30%, #e8c4ff, #a64fd6 60%, #4f1a73)"},
+  {key:"red",    name:"Red",    css:"var(--c-red)",    grad:"radial-gradient(circle at 35% 30%, #ff9a93, #c92a23 60%, #5e0c08)"},
+  {key:"black",  name:"Black",  css:"var(--c-black)",  grad:"radial-gradient(circle at 35% 30%, #5a6franc, #262d44 60%, #05070f)"}
+];
+// fix accidental typo-proof gradient for black
+COLORS[7].grad = "radial-gradient(circle at 35% 30%, #58648f, #262d44 60%, #05070f)";
+
+const LEFT = [0,1,2,3], RIGHT = [4,5,6,7];
+const RANGE = i => LEFT.includes(i) ? {min:1, max:7} : {min:5, max:11};
+function safeRange(col){
+  if(S && S.cfg && S.cfg.safe === "2") return LEFT.includes(col) ? {lo:5, hi:6} : {lo:6, hi:7};
+  return {lo:5, hi:7};
+}
+const DICE_SETS = {
+  std:  ["up","up","down","down","wild","blank"],
+  hard: ["up","up","up","down","down","down"]
+};
+const FACE_GLYPH = {up:'<span class="arrow up">▶</span>', down:'<span class="arrow down">◀</span>',
+                    wild:'<span class="arrow wild">◀▶</span>', blank:'<span class="blank">✕</span>'};
+
+/* ---------------- seeded RNG ---------------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+function hashSeed(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+
+/* ---------------- state ---------------- */
+let S = null;
+
+function newGame(){
+  const seedTxt = document.getElementById("seedInput").value.trim() ||
+                  Math.random().toString(36).slice(2,8);
+  const rng = mulberry32(hashSeed(seedTxt));
+  // bag: 4 of each color
+  const bag = [];
+  for(let c=0;c<8;c++) for(let k=0;k<4;k++) bag.push(c);
+  // shuffle
+  for(let i=bag.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[bag[i],bag[j]]=[bag[j],bag[i]];}
+
+  const cfg = {
+    mode:  document.getElementById("modeSel").value,
+    safe:  document.getElementById("safeSel").value,
+    start: document.getElementById("startSel").value,
+    place: document.getElementById("placeSel").value,
+    dice:  document.getElementById("diceSel").value
+  };
+  const startPos = i => {
+    if(cfg.start === "edge") return LEFT.includes(i) ? 2 : 10;
+    if(cfg.start === "rand") return LEFT.includes(i) ? 2 + Math.floor(rng()*3) : 8 + Math.floor(rng()*3);
+    return LEFT.includes(i) ? 3 : 9;
+  };
+
+  S = {
+    seed: seedTxt, rng, cfg,
+    pos: Array.from({length:8},(_,i)=>startPos(i)),
+    ties: Array.from({length:8},()=>[]),     // ties[col] = [colorIdx,...] tokens tied under that column
+    bag,
+    round: 0,
+    tokensPlaced: 0,
+    phase: "tokens",        // tokens | dice | over
+    drawn: [],              // [{color, placed:bool}]
+    dice: [],               // [{face, dir(if wild chosen), placedCol|null}]
+    usedCols: [],
+    selToken: null,
+    selDie: null,
+    wildDir: null,
+    over: null,             // {win:bool, msg}
+  };
+  document.getElementById("seedShow").textContent = "seed: " + seedTxt;
+  log(`New game — seed ${seedTxt} · win: ${cfg.mode} · band: ${cfg.safe}-wide · start: ${cfg.start} · tokens: ${cfg.place} · dice: ${cfg.dice}`, "round");
+  startRound();
+}
+
+function startRound(){
+  S.round++;
+  S.usedCols = [];
+  S.selToken = null; S.selDie = null; S.wildDir = null;
+  if(S.bag.length < 2){
+    endGame(false, "The bag is empty. Sixteen rounds have passed and balance was never achieved.");
+    return;
+  }
+  S.drawn = [ {color:S.bag.pop(), placed:false}, {color:S.bag.pop(), placed:false} ];
+  S.phase = "tokens";
+  log(`— Round ${S.round} —`, "round");
+  log(`Drew ${sw(S.drawn[0].color)}${COLORS[S.drawn[0].color].name} and ${sw(S.drawn[1].color)}${COLORS[S.drawn[1].color].name}.`);
+  render();
+}
+
+function rollDice(){
+  S.dice = Array.from({length:8},()=>({face:DICE_SETS[S.cfg.dice][Math.floor(S.rng()*6)], dir:null, placedCol:null}));
+  S.phase = "dice";
+  const summary = S.dice.map(d=>({up:"▶",down:"◀",wild:"◀▶",blank:"✕"}[d.face])).join(" ");
+  log(`Rolled: ${summary}`);
+  render();
+}
+
+/* ---------------- actions ---------------- */
+function forcedCol(){ return S.tokensPlaced % 8; }
+
+function placeToken(col){
+  const t = S.drawn[S.selToken];
+  if(!t || t.placed) return;
+  if(S.cfg.place === "forced"){
+    if(col !== forcedCol()) return;       // must use the next slot in reading order
+  }
+  if(S.ties[col].length >= 4){ return; }
+  S.ties[col].push(t.color);
+  S.tokensPlaced++;
+  t.placed = true;
+  S.selToken = null;
+  log(`Tied ${sw(t.color)}${COLORS[t.color].name} to the ${sw(col)}${COLORS[col].name} row.`);
+  if(S.drawn.every(d=>d.placed)){ rollDice(); return; }
+  // auto-select the remaining token for speed
+  S.selToken = S.drawn.findIndex(d=>!d.placed);
+  render();
+}
+
+function moveMarker(col, dir, cause){
+  S.pos[col] += dir;
+  const {min,max} = RANGE(col);
+  log(`${sw(col)}${COLORS[col].name} moves ${dir>0?"right":"left"} to ${posLabel(col)}${cause?` (${cause})`:""}.`);
+  if(S.pos[col] < min || S.pos[col] > max){
+    log(`${COLORS[col].name} fell off the ${S.pos[col]<min?"left":"right"} edge!`, "death");
+    endGame(false, `The ${COLORS[col].name} marker went off the edge. Equilibrium lost.`);
+    return false;
+  }
+  return true;
+}
+
+function placeDie(col){
+  const d = S.dice[S.selDie];
+  if(!d || d.placedCol !== null) return;
+  if(S.usedCols.includes(col)) return;
+  let dir = 0;
+  if(d.face === "up") dir = 1;
+  else if(d.face === "down") dir = -1;
+  else if(d.face === "wild"){
+    if(S.wildDir === null) return;          // must pick direction first
+    dir = S.wildDir;
+  }
+  d.placedCol = col;
+  d.dir = dir;
+  S.usedCols.push(col);
+  S.selDie = null; S.wildDir = null;
+
+  if(d.face === "blank"){
+    log(`Blank die on ${sw(col)}${COLORS[col].name} — no movement.`);
+  } else {
+    if(!moveMarker(col, dir, "die")) { render(); return; }
+    for(const tied of S.ties[col]){
+      if(!moveMarker(tied, dir, `tied under ${COLORS[col].name}`)) { render(); return; }
+    }
+  }
+
+  // beginner mode: win check after every die
+  if(S.cfg.mode === "beginner" && allSafe()){
+    endGame(true, `All eight markers reached the equilibrium band on round ${S.round}.`);
+    return;
+  }
+
+  if(S.dice.every(x=>x.placedCol !== null)){
+    // end of round win check (both modes)
+    if(allSafe()){
+      endGame(true, `All eight markers are in the equilibrium band at the end of round ${S.round}.`);
+      return;
+    }
+    startRound();
+    return;
+  }
+  render();
+}
+
+function allSafe(){
+  return S.pos.every((p,i)=>{ const {lo,hi} = safeRange(i); return p >= lo && p <= hi; });
+}
+
+function endGame(win, msg){
+  S.phase = "over";
+  S.over = {win, msg};
+  log(win ? "PERFECT BALANCE — you win!" : "Game over.", win ? "win" : "death");
+  render();
+}
+
+/* ---------------- helpers ---------------- */
+function posLabel(col){ return "space " + S.pos[col]; }
+function sw(colorIdx){
+  return `<span class="sw" style="background:${COLORS[colorIdx].css}"></span>`;
+}
+function log(html, cls){
+  const p = document.createElement("p");
+  if(cls) p.className = cls;
+  p.innerHTML = html;
+  document.getElementById("log").prepend(p);
+}
+
+/* ---------------- rendering ---------------- */
+function render(){
+  renderBoard();
+  renderPanel();
+}
+
+function renderBoard(){
+  const b = document.getElementById("board");
+  b.innerHTML = "";
+  // header row: corner, space numbers 1..11, spacer, TIED label
+  b.appendChild(el("div",""));
+  for(let s=1;s<=11;s++){ const n = el("div","numlabel"); n.textContent = s; b.appendChild(n); }
+  b.appendChild(el("div","spacer"));
+  const tl = el("div","tied-label"); tl.textContent = "TIED"; tl.style.gridColumn = "span 4";
+  b.appendChild(tl);
+
+  // one row per color: orb header, 11 track cells, spacer, 4 tie slots
+  for(let r=0;r<8;r++){
+    const head = el("div","colhead");
+    head.dataset.col = r;
+    head.title = COLORS[r].name;
+    const orb = el("div","colhead-orb " + COLORS[r].key);
+    orb.style.background = COLORS[r].grad;
+    head.appendChild(orb);
+    b.appendChild(head);
+
+    const {min,max} = RANGE(r);
+    const {lo,hi} = safeRange(r);
+    for(let s=1;s<=11;s++){
+      const cell = el("div","cell");
+      if(s < min || s > max) cell.classList.add("void");
+      else if(s >= lo && s <= hi) cell.classList.add("safe");
+      if(S.pos[r] === s && S.pos[r] >= min && S.pos[r] <= max){
+        const m = el("div","orb marker " + COLORS[r].key);
+        m.style.background = COLORS[r].grad;
+        cell.appendChild(m);
+      }
+      cell.dataset.col = r;
+      b.appendChild(cell);
+    }
+
+    b.appendChild(el("div","spacer"));
+    for(let k=0;k<4;k++){
+      const slot = el("div","slot");
+      slot.dataset.col = r;
+      if(S.ties[r][k] !== undefined){
+        const t = el("div","orb " + COLORS[S.ties[r][k]].key);
+        t.style.background = COLORS[S.ties[r][k]].grad;
+        slot.appendChild(t);
+        slot.style.borderStyle = "solid";
+      }
+      b.appendChild(slot);
+    }
+  }
+
+  b.onclick = (e)=>{
+    const t = e.target.closest("[data-col]");
+    if(!t) return;
+    handleColumnClick(+t.dataset.col);
+  };
+  markTargets(b);
+}
+
+function markTargets(b){
+  let valid = [];
+  if(S.phase === "tokens" && S.selToken !== null){
+    valid = S.cfg.place === "forced"
+      ? (S.ties[forcedCol()].length < 4 ? [forcedCol()] : [])
+      : [...Array(8).keys()].filter(c => S.ties[c].length < 4);
+  } else if(S.phase === "dice" && S.selDie !== null){
+    const d = S.dice[S.selDie];
+    const ready = d.face !== "wild" || S.wildDir !== null;
+    if(ready) valid = [...Array(8).keys()].filter(c => !S.usedCols.includes(c));
+  }
+  b.querySelectorAll(".cell").forEach(x=>{
+    if(valid.includes(+x.dataset.col) && !x.classList.contains("void"))
+      x.style.borderColor = "var(--accent)";
+  });
+  b.querySelectorAll(".colhead").forEach((h,i)=>{
+    const orb = h.querySelector(".colhead-orb");
+    if(valid.includes(i)) orb.classList.add("pulse");
+    if(S.phase === "dice" && S.usedCols.includes(i)) orb.style.opacity = .35;
+  });
+}
+
+function handleColumnClick(col){
+  if(S.phase === "tokens" && S.selToken !== null) placeToken(col);
+  else if(S.phase === "dice" && S.selDie !== null) placeDie(col);
+}
+
+function renderPanel(){
+  const msg = document.getElementById("phaseMsg");
+  const tokenCard = document.getElementById("tokenCard");
+  const diceCard = document.getElementById("diceCard");
+  document.getElementById("roundShow").textContent = `Round ${S.round} of 16`;
+  document.getElementById("bagShow").textContent = `Tokens left in bag: ${S.bag.length}`;
+
+  if(S.phase === "tokens"){
+    tokenCard.classList.remove("hidden");
+    diceCard.classList.add("hidden");
+    msg.innerHTML = S.selToken === null
+      ? `Select a drawn token, then click a row to tie it there.`
+      : (S.cfg.place === "forced"
+          ? `Forced placement: the next slot is on the <b>${COLORS[forcedCol()].name}</b> row. Click it to tie the <b>${COLORS[S.drawn[S.selToken].color].name}</b> token there — your only choice is which token goes first.`
+          : `Click a row to tie the <b>${COLORS[S.drawn[S.selToken].color].name}</b> token. It will move whenever that row moves.`);
+  } else if(S.phase === "dice"){
+    tokenCard.classList.add("hidden");
+    diceCard.classList.remove("hidden");
+    const left = S.dice.filter(d=>d.placedCol===null).length;
+    if(S.selDie === null){
+      msg.innerHTML = `Select a die, then click a row. <b>${left}</b> dice remaining. Every row gets exactly one die.`;
+    } else {
+      const d = S.dice[S.selDie];
+      msg.innerHTML = d.face === "wild" && S.wildDir === null
+        ? `Choose a direction for the <b>wild</b> die, then click a row.`
+        : `Click a row to place this die.`;
+    }
+  } else if(S.phase === "over"){
+    tokenCard.classList.add("hidden");
+    diceCard.classList.add("hidden");
+    msg.textContent = S.over.win ? "Victory." : "Defeat.";
+  }
+
+  // token tray
+  const tray = document.getElementById("tokenTray");
+  tray.innerHTML = "";
+  S.drawn.forEach((t,i)=>{
+    const btn = el("button","draw-token" + (t.placed?" placed":"") + (S.selToken===i?" selected":""));
+    const orb = el("div","orb " + COLORS[t.color].key);
+    orb.style.background = COLORS[t.color].grad;
+    btn.appendChild(orb);
+    btn.title = COLORS[t.color].name;
+    btn.disabled = t.placed;
+    btn.onclick = ()=>{ S.selToken = i; render(); };
+    tray.appendChild(btn);
+  });
+  if(S.phase==="tokens" && S.selToken===null){
+    const idx = S.drawn.findIndex(d=>!d.placed);
+    if(idx>=0){ S.selToken = idx; [...tray.children][idx].classList.add("selected"); }
+  }
+
+  // dice tray
+  const dtray = document.getElementById("diceTray");
+  dtray.innerHTML = "";
+  S.dice.forEach((d,i)=>{
+    const btn = el("button","die" + (d.placedCol!==null?" placed":"") + (S.selDie===i?" selected":""));
+    btn.innerHTML = FACE_GLYPH[d.face];
+    btn.disabled = d.placedCol !== null;
+    btn.onclick = ()=>{ S.selDie = i; S.wildDir = null; render(); };
+    dtray.appendChild(btn);
+  });
+  const wc = document.getElementById("wildChoice");
+  const needWild = S.phase==="dice" && S.selDie!==null && S.dice[S.selDie].face==="wild";
+  wc.classList.toggle("hidden", !needWild);
+  if(needWild){
+    document.getElementById("wildUp").style.outline = S.wildDir===1 ? "2px solid var(--accent)" : "none";
+    document.getElementById("wildDown").style.outline = S.wildDir===-1 ? "2px solid var(--accent)" : "none";
+  }
+
+  // banner
+  const banner = document.getElementById("banner");
+  if(S.phase === "over"){
+    banner.classList.remove("hidden");
+    banner.classList.toggle("win", S.over.win);
+    banner.classList.toggle("loss", !S.over.win);
+    document.getElementById("bannerTitle").textContent = S.over.win ? "PERFECT BALANCE" : "EQUILIBRIUM LOST";
+    document.getElementById("bannerMsg").textContent = S.over.msg;
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+
+function el(tag, cls){ const d = document.createElement(tag); if(cls) d.className = cls; return d; }
+
+/* ---------------- wire up ---------------- */
+document.getElementById("newGameBtn").onclick = ()=>{ document.getElementById("log").innerHTML=""; newGame(); };
+document.getElementById("bannerBtn").onclick = ()=>{ document.getElementById("log").innerHTML=""; newGame(); };
+document.getElementById("wildUp").onclick = ()=>{ S.wildDir = 1; render(); };
+document.getElementById("wildDown").onclick = ()=>{ S.wildDir = -1; render(); };
+
+newGame();
+</script>
+</body>
+</html>
